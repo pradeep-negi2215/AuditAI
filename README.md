@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Spend Auditor (Credex)
 
-## Getting Started
+Free, pricing-grounded audits that show AI subscription overspend, recommended plan switches, and estimated savings.
 
-First, run the development server:
+## What is included
+
+- Rule-based audit engine with pricing data in `src/lib/audit`.
+- Country-aware pricing for supported regional plans.
+- Next.js 14 App Router setup with Tailwind CSS and shadcn/ui base components.
+- Supabase, Resend, and Anthropic client stubs (no secrets in repo).
+- Vitest tests and GitHub Actions CI for lint and tests.
+
+## Local development
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run lint
+npm test
+```
 
-## Learn More
+## Environment variables
 
-To learn more about Next.js, take a look at the following resources:
+Set these in `.env.local` (do not commit secrets):
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- NEXT_PUBLIC_SUPABASE_URL
+- NEXT_PUBLIC_SUPABASE_ANON_KEY
+- SUPABASE_URL
+- SUPABASE_SERVICE_ROLE_KEY
+- RESEND_API_KEY
+- ANTHROPIC_API_KEY
+- ANTHROPIC_SUMMARY_MODEL (optional, default: claude-sonnet-4.6)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Pricing sources
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Pricing data is tracked in `src/lib/audit/pricing-data.ts` and summarized in PRICING_DATA.md. Verify before production use since vendor pricing changes.
