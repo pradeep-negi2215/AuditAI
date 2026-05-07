@@ -100,7 +100,7 @@ const parseNumber = (value: string) => {
 export default function AuditPage() {
   const [country, setCountry] = useState<CountryCode>("US");
   const [entries, setEntries] = useState<ToolEntry[]>([createEntry("cursor")]);
-  const [step, setStep] = useState<"location" | "tools" | "results">("location");
+  const [step, setStep] = useState<"location" | "tools" | "review" | "results">("location");
   const [report, setReport] = useState<AuditReport | null>(null);
   const [summary, setSummary] = useState<string>("");
   const [summaryStatus, setSummaryStatus] = useState<
@@ -192,6 +192,11 @@ export default function AuditPage() {
     [entries],
   );
 
+  const selectedCountry = useMemo(
+    () => countryOptions.find((option) => option.code === country),
+    [country],
+  );
+
   const handleEntryChange = (id: string, patch: Partial<ToolEntry>) => {
     setEntries((current) =>
       current.map((entry) =>
@@ -211,6 +216,14 @@ export default function AuditPage() {
 
   const handleRemoveTool = (id: string) => {
     setEntries((current) => current.filter((entry) => entry.id !== id));
+  };
+
+  const handleAdvanceFromTools = () => {
+    setStep("review");
+  };
+
+  const handleBackFromReview = () => {
+    setStep("tools");
   };
 
   const handleRunAudit = async () => {
@@ -374,7 +387,13 @@ export default function AuditPage() {
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span>3. Results</span>
+                <span>3. Review</span>
+                <span className={step === "review" ? "font-semibold" : "text-muted-foreground"}>
+                  {step === "review" ? "Active" : ""}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>4. Results</span>
                 <span className={step === "results" ? "font-semibold" : "text-muted-foreground"}>
                   {step === "results" ? "Active" : ""}
                 </span>
@@ -579,10 +598,80 @@ export default function AuditPage() {
                     <Button type="button" variant="ghost" onClick={() => setStep("location")}>
                       Back
                     </Button>
-                    <Button type="button" onClick={handleRunAudit}>
-                      Run audit
+                    <Button type="button" onClick={handleAdvanceFromTools}>
+                      Review audit
                     </Button>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {step === "review" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Review your inputs</CardTitle>
+                <CardDescription>
+                  Confirm the country and subscriptions before running the audit.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-md border p-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                      Country
+                    </p>
+                    <p className="mt-2 text-lg font-semibold">
+                      {selectedCountry?.label ?? country}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Pricing shown in {selectedCountry?.currency ?? "USD"}
+                    </p>
+                  </div>
+                  <div className="rounded-md border p-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                      Tools
+                    </p>
+                    <p className="mt-2 text-lg font-semibold">{entries.length}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {totalTeamSize} total team size across the audit
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {entries.map((entry, index) => {
+                    const tool = pricingData.tools[entry.toolId];
+                    const plan = tool?.plans.find((item) => item.id === entry.planId);
+
+                    return (
+                      <div key={entry.id} className="rounded-md border p-4 text-sm">
+                        <p className="font-semibold">
+                          {index + 1}. {tool?.displayName ?? entry.toolId}
+                        </p>
+                        <p className="text-muted-foreground">
+                          {plan?.name ?? entry.planId} · {entry.seats} seat(s) · {entry.billingCycle}
+                        </p>
+                        <p className="text-muted-foreground">
+                          Use case: {entry.useCase} · Team size: {entry.teamSize}
+                        </p>
+                        {entry.monthlySpend && (
+                          <p className="text-muted-foreground">
+                            Monthly spend override: {entry.monthlySpend}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <Button type="button" variant="ghost" onClick={handleBackFromReview}>
+                    Back
+                  </Button>
+                  <Button type="button" onClick={handleRunAudit}>
+                    Run audit
+                  </Button>
                 </div>
               </CardContent>
             </Card>
