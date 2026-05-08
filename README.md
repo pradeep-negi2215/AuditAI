@@ -6,7 +6,7 @@ Free, pricing-grounded audits that show AI subscription overspend, recommended p
 
 - Rule-based audit engine with pricing data in `src/lib/audit`.
 - Country-aware pricing for supported regional plans.
-- Next.js 14 App Router setup with Tailwind CSS and shadcn/ui base components.
+- Next.js 16 App Router setup with Tailwind CSS and shadcn/ui base components.
 - Supabase, Resend, and Anthropic client stubs (no secrets in repo).
 - Vitest tests and GitHub Actions CI for lint and tests.
 
@@ -27,7 +27,8 @@ npm test
 
 ## Environment variables
 
-Set these in `.env.local` (do not commit secrets):
+Set these in `.env.local` for development or in your deployment platform's secret manager.
+See `.env.example` for the full list.
 
 - NEXT_PUBLIC_SUPABASE_URL
 - NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -36,6 +37,14 @@ Set these in `.env.local` (do not commit secrets):
 - RESEND_API_KEY
 - ANTHROPIC_API_KEY
 - ANTHROPIC_SUMMARY_MODEL (optional, default: claude-sonnet-4.6)
+
+## Deployment
+
+This project is ready for Vercel or any Node 20+ host that supports Next.js App Router.
+
+1. Set the environment variables listed above.
+2. Run `npm run build` and confirm it succeeds.
+3. Use `npm start` in production or let Vercel build from the repo.
 
 ## Pricing sources
 
