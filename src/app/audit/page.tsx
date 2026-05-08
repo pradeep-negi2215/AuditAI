@@ -125,6 +125,7 @@ export default function AuditPage() {
       return;
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOrigin(window.location.origin);
 
     const stored = window.localStorage.getItem(STORAGE_KEY);
