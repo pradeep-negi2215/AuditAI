@@ -5,10 +5,14 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   countryOptions,
-  formatCurrency,
-  pricingData,
   runAudit,
 } from "@/lib/audit";
+import {
+  formatCurrency,
+  getDefaultPlanId,
+  getToolById,
+  pricingData,
+} from "@/lib/audit/pricing-data";
 import type {
   AuditReport,
   BillingCycle,
@@ -16,7 +20,7 @@ import type {
   SpendInput,
   ToolId,
   UseCase,
-} from "@/lib/audit";
+} from "@/lib/audit/pricing-data";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -53,9 +57,9 @@ type LeadFormState = {
 const useCaseOptions: Array<{ value: UseCase; label: string }> = [
   { value: "coding", label: "Coding" },
   { value: "writing", label: "Writing" },
-  { value: "data", label: "Data" },
   { value: "research", label: "Research" },
-  { value: "mixed", label: "Mixed" },
+  { value: "api-integration", label: "API Integration" },
+  { value: "general", label: "General" },
 ];
 
 const billingOptions: Array<{ value: BillingCycle; label: string }> = [
@@ -68,14 +72,6 @@ const createId = () => {
     return crypto.randomUUID();
   }
   return `entry_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-};
-
-const getDefaultPlanId = (toolId: ToolId) => {
-  const plans = pricingData.tools[toolId]?.plans ?? [];
-  const paidPlan = plans.find(
-    (plan) => plan.planType === "subscription" && !plan.isFreeTier,
-  );
-  return paidPlan?.id ?? plans[0]?.id ?? "";
 };
 
 const createEntry = (toolId: ToolId): ToolEntry => ({
@@ -153,7 +149,7 @@ export default function AuditPage() {
                 ? entry.teamSize
                 : entry.seats,
             planId:
-              pricingData.tools[entry.toolId]?.plans.some(
+              getToolById(entry.toolId).plans.some(
                 (plan) => plan.id === entry.planId,
               )
                 ? entry.planId
@@ -181,7 +177,7 @@ export default function AuditPage() {
     () =>
       entries.map((entry) => ({
         toolId: entry.toolId,
-        planId: entry.planId,
+        currentPlanId: entry.planId,
         monthlySpend: parseNumber(entry.monthlySpend),
         seats: entry.seats,
         teamSize: entry.teamSize,
@@ -517,8 +513,8 @@ export default function AuditPage() {
                                 }
                               >
                                 {Object.values(pricingData.tools).map((option) => (
-                                  <option key={option.toolId} value={option.toolId}>
-                                    {option.displayName}
+                                  <option key={option.id} value={option.id}>
+                                    {option.name}
                                   </option>
                                 ))}
                               </Select>
@@ -690,7 +686,7 @@ export default function AuditPage() {
                         return (
                           <div key={entry.id} className="rounded-2xl border border-border/70 bg-background/80 p-4 text-sm shadow-sm">
                             <p className="font-semibold">
-                              {index + 1}. {tool?.displayName ?? entry.toolId}
+                              {index + 1}. {tool?.name ?? entry.toolId}
                             </p>
                             <p className="text-muted-foreground">
                               {plan?.name ?? entry.planId} · {entry.seats} seat(s) · {entry.billingCycle}
@@ -789,7 +785,7 @@ export default function AuditPage() {
                             <div>
                               <p className="text-sm font-semibold">{result.toolName}</p>
                               <p className="text-xs text-muted-foreground">
-                                {result.currentPlanName} → {result.recommended.planName}
+                                {result.currentPlanName} → {result.recommended?.planName ?? "No recommendation"}
                               </p>
                             </div>
                             <div className="text-right">

@@ -1,491 +1,538 @@
-import type { PricingData, UseCase } from "./types";
+export type ToolId =
+  | "cursor"
+  | "github-copilot"
+  | "claude"
+  | "chatgpt"
+  | "anthropic-api"
+  | "openai-api"
+  | "gemini"
+  | "windsurf";
 
-const ALL_USE_CASES: UseCase[] = [
-  "coding",
-  "writing",
-  "data",
-  "research",
-  "mixed",
+export type PlanId = string;
+export type UseCase =
+  | "coding"
+  | "writing"
+  | "research"
+  | "api-integration"
+  | "general";
+export type BillingCycle = "monthly" | "annual";
+export type CountryCode = "US" | "IN" | "GB" | "CA" | "AU" | "DE" | "FR";
+
+export interface Plan {
+  id: PlanId;
+  name: string;
+  pricePerSeatMonthly: number;
+  isFreeTier: boolean;
+  planType: "subscription" | "api";
+  minSeats: number;
+  maxSeats: number;
+}
+
+export interface Tool {
+  id: ToolId;
+  name: string;
+  category: "coding-assistant" | "writing-assistant" | "api" | "general-ai";
+  plans: Plan[];
+}
+
+export interface PricingDatabase {
+  tools: Record<ToolId, Tool>;
+}
+
+export interface SpendInput {
+  toolId: ToolId;
+  currentPlanId: PlanId;
+  seats: number;
+  teamSize: number;
+  useCase: UseCase;
+  monthlySpend?: number;
+  monthlyTokens?: number;
+  country: CountryCode;
+  billingCycle: BillingCycle;
+}
+
+export interface AuditResult {
+  toolId: ToolId;
+  toolName: string;
+  currentPlanName: string;
+  currentSpendMonthly: number;
+  recommended: {
+    planName: string;
+    spendMonthly: number;
+    reason: string;
+  } | null;
+  savingsMonthly: number;
+  savingsAnnual: number;
+  currency: string;
+  reasons: string[];
+  flags: string[];
+}
+
+export interface AuditReport {
+  results: AuditResult[];
+  totalsByCurrency: {
+    currency: string;
+    savingsMonthly: number;
+    savingsAnnual: number;
+  }[];
+  hasMixedCurrency: boolean;
+  generatedAt: string;
+}
+
+export const countryOptions: { code: CountryCode; name: string }[] = [
+  { code: "US", name: "United States" },
+  { code: "IN", name: "India" },
+  { code: "GB", name: "United Kingdom" },
+  { code: "CA", name: "Canada" },
+  { code: "AU", name: "Australia" },
+  { code: "DE", name: "Germany" },
+  { code: "FR", name: "France" },
 ];
 
-export const pricingData: PricingData = {
+export const countryCurrencies: Record<CountryCode, string> = {
+  US: "USD",
+  IN: "INR",
+  GB: "GBP",
+  CA: "CAD",
+  AU: "AUD",
+  DE: "EUR",
+  FR: "EUR",
+};
+
+export function formatCurrency(
+  amount: number,
+  currency: string,
+  country: CountryCode,
+): string {
+  const formatter = new Intl.NumberFormat(
+    country === "US"
+      ? "en-US"
+      : country === "IN"
+        ? "en-IN"
+        : country === "GB"
+          ? "en-GB"
+          : country === "CA"
+            ? "en-CA"
+            : country === "AU"
+              ? "en-AU"
+              : country === "DE"
+                ? "de-DE"
+                : "fr-FR",
+    {
+      style: "currency",
+      currency: currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    },
+  );
+
+  return formatter.format(amount);
+}
+
+export const pricingData: PricingDatabase = {
   tools: {
     cursor: {
-      toolId: "cursor",
-      displayName: "Cursor",
-      category: "coding",
-      alternatives: ["copilot", "windsurf"],
+      id: "cursor",
+      name: "Cursor",
+      category: "coding-assistant",
       plans: [
         {
-          id: "cursor_free",
+          id: "hobby",
           name: "Hobby (Free)",
-          planType: "subscription",
-          costModel: "flat",
-          currency: "USD",
-          monthlyFlat: 0,
-          minSeats: 1,
-          maxSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://www.cursor.com/pricing",
+          pricePerSeatMonthly: 0,
           isFreeTier: true,
+          planType: "subscription",
+          minSeats: 1,
+          maxSeats: 1,
         },
         {
-          id: "cursor_pro",
+          id: "pro",
           name: "Pro",
+          pricePerSeatMonthly: 20,
+          isFreeTier: false,
           planType: "subscription",
-          costModel: "flat",
-          currency: "USD",
-          monthlyFlat: 20,
           minSeats: 1,
           maxSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://www.cursor.com/pricing",
         },
         {
-          id: "cursor_pro_plus",
-          name: "Pro+",
+          id: "pro-plus",
+          name: "Pro Plus",
+          pricePerSeatMonthly: 60,
+          isFreeTier: false,
           planType: "subscription",
-          costModel: "flat",
-          currency: "USD",
-          monthlyFlat: 60,
           minSeats: 1,
           maxSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://www.cursor.com/pricing",
         },
         {
-          id: "cursor_ultra",
+          id: "ultra",
           name: "Ultra",
+          pricePerSeatMonthly: 200,
+          isFreeTier: false,
           planType: "subscription",
-          costModel: "flat",
-          currency: "USD",
-          monthlyFlat: 200,
           minSeats: 1,
           maxSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://www.cursor.com/pricing",
         },
         {
-          id: "cursor_teams",
+          id: "teams",
           name: "Teams",
+          pricePerSeatMonthly: 40,
+          isFreeTier: false,
           planType: "subscription",
-          costModel: "seat",
-          currency: "USD",
-          monthlyPerSeat: 40,
-          minSeats: 2,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://www.cursor.com/pricing",
+          minSeats: 3,
+          maxSeats: 999,
+        },
+        {
+          id: "enterprise",
+          name: "Enterprise",
+          pricePerSeatMonthly: 0,
+          isFreeTier: false,
+          planType: "subscription",
+          minSeats: 10,
+          maxSeats: 9999,
         },
       ],
     },
-    copilot: {
-      toolId: "copilot",
-      displayName: "GitHub Copilot",
-      category: "coding",
-      alternatives: ["cursor", "windsurf"],
+    "github-copilot": {
+      id: "github-copilot",
+      name: "GitHub Copilot",
+      category: "coding-assistant",
       plans: [
         {
-          id: "copilot_free",
+          id: "free",
           name: "Free",
+          pricePerSeatMonthly: 0,
+          isFreeTier: true,
           planType: "subscription",
-          costModel: "flat",
-          currency: "USD",
-          monthlyFlat: 0,
           minSeats: 1,
           maxSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://github.com/features/copilot/plans",
-          isFreeTier: true,
         },
         {
-          id: "copilot_pro",
+          id: "pro",
           name: "Pro",
+          pricePerSeatMonthly: 10,
+          isFreeTier: false,
           planType: "subscription",
-          costModel: "seat",
-          currency: "USD",
-          monthlyPerSeat: 10,
-          minSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://github.com/features/copilot/plans",
-        },
-        {
-          id: "copilot_pro_plus",
-          name: "Pro+",
-          planType: "subscription",
-          costModel: "seat",
-          currency: "USD",
-          monthlyPerSeat: 39,
-          minSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://github.com/features/copilot/plans",
-        },
-      ],
-    },
-    windsurf: {
-      toolId: "windsurf",
-      displayName: "Windsurf",
-      category: "coding",
-      alternatives: ["cursor", "copilot"],
-      plans: [
-        {
-          id: "windsurf_free",
-          name: "Free",
-          planType: "subscription",
-          costModel: "flat",
-          currency: "USD",
-          monthlyFlat: 0,
           minSeats: 1,
           maxSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://windsurf.com/pricing",
-          isFreeTier: true,
         },
         {
-          id: "windsurf_pro",
-          name: "Pro",
+          id: "pro-plus",
+          name: "Pro Plus",
+          pricePerSeatMonthly: 39,
+          isFreeTier: false,
           planType: "subscription",
-          costModel: "flat",
-          currency: "USD",
-          monthlyFlat: 20,
           minSeats: 1,
           maxSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://windsurf.com/pricing",
         },
         {
-          id: "windsurf_max",
-          name: "Max",
-          planType: "subscription",
-          costModel: "flat",
-          currency: "USD",
-          monthlyFlat: 200,
-          minSeats: 1,
-          maxSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://windsurf.com/pricing",
-        },
-        {
-          id: "windsurf_teams",
-          name: "Teams",
-          planType: "subscription",
-          costModel: "seat",
-          currency: "USD",
-          monthlyPerSeat: 40,
-          minSeats: 2,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://windsurf.com/pricing",
-        },
-      ],
-    },
-    v0: {
-      toolId: "v0",
-      displayName: "v0",
-      category: "prototyping",
-      alternatives: [],
-      plans: [
-        {
-          id: "v0_free",
-          name: "Free",
-          planType: "subscription",
-          costModel: "flat",
-          currency: "USD",
-          monthlyFlat: 0,
-          minSeats: 1,
-          maxSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://v0.app/pricing",
-          isFreeTier: true,
-        },
-        {
-          id: "v0_team",
-          name: "Team",
-          planType: "subscription",
-          costModel: "seat",
-          currency: "USD",
-          monthlyPerSeat: 30,
-          minSeats: 2,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://v0.app/pricing",
-        },
-        {
-          id: "v0_business",
+          id: "business",
           name: "Business",
+          pricePerSeatMonthly: 19,
+          isFreeTier: false,
           planType: "subscription",
-          costModel: "seat",
-          currency: "USD",
-          monthlyPerSeat: 100,
-          minSeats: 2,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://v0.app/pricing",
-        },
-      ],
-    },
-    chatgpt: {
-      toolId: "chatgpt",
-      displayName: "ChatGPT",
-      category: "assistant",
-      alternatives: ["claude", "gemini"],
-      plans: [
-        {
-          id: "chatgpt_free",
-          name: "Free",
-          planType: "subscription",
-          costModel: "flat",
-          currency: "INR",
-          monthlyFlat: 0,
-          minSeats: 1,
-          maxSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://chatgpt.com/pricing",
-          isFreeTier: true,
+          minSeats: 3,
+          maxSeats: 999,
         },
         {
-          id: "chatgpt_go",
-          name: "Go",
+          id: "enterprise",
+          name: "Enterprise",
+          pricePerSeatMonthly: 39,
+          isFreeTier: false,
           planType: "subscription",
-          costModel: "flat",
-          currency: "INR",
-          monthlyFlat: 399,
-          minSeats: 1,
-          maxSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://chatgpt.com/pricing",
-        },
-        {
-          id: "chatgpt_plus",
-          name: "Plus",
-          planType: "subscription",
-          costModel: "flat",
-          currency: "INR",
-          monthlyFlat: 1999,
-          minSeats: 1,
-          maxSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://chatgpt.com/pricing",
-        },
-        {
-          id: "chatgpt_pro",
-          name: "Pro",
-          planType: "subscription",
-          costModel: "flat",
-          currency: "INR",
-          monthlyFlat: 10699,
-          minSeats: 1,
-          maxSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://chatgpt.com/pricing",
-        },
-        {
-          id: "chatgpt_business",
-          name: "Business",
-          planType: "subscription",
-          costModel: "seat",
-          currency: "INR",
-          monthlyPerSeat: 2250,
-          monthlyPerSeatAnnual: 1800,
-          minSeats: 2,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://chatgpt.com/pricing",
-          notes: "Annual price shown per user per month.",
+          minSeats: 10,
+          maxSeats: 9999,
         },
       ],
     },
     claude: {
-      toolId: "claude",
-      displayName: "Claude",
-      category: "assistant",
-      alternatives: ["chatgpt", "gemini"],
+      id: "claude",
+      name: "Claude",
+      category: "writing-assistant",
       plans: [
         {
-          id: "claude_free",
+          id: "free",
           name: "Free",
-          planType: "subscription",
-          costModel: "flat",
-          currency: "USD",
-          monthlyFlat: 0,
-          minSeats: 1,
-          maxSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://claude.com/pricing",
+          pricePerSeatMonthly: 0,
           isFreeTier: true,
+          planType: "subscription",
+          minSeats: 1,
+          maxSeats: 1,
         },
         {
-          id: "claude_pro",
+          id: "pro",
           name: "Pro",
+          pricePerSeatMonthly: 20,
+          isFreeTier: false,
           planType: "subscription",
-          costModel: "flat",
-          currency: "USD",
-          monthlyFlat: 20,
-          monthlyFlatAnnual: 17,
           minSeats: 1,
           maxSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://claude.com/pricing",
-          notes: "Annual price shown per month.",
         },
         {
-          id: "claude_max",
-          name: "Max",
+          id: "max-5x",
+          name: "Max (5x)",
+          pricePerSeatMonthly: 100,
+          isFreeTier: false,
           planType: "subscription",
-          costModel: "flat",
-          currency: "USD",
-          monthlyFlat: 100,
           minSeats: 1,
           maxSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://claude.com/pricing",
-          notes: "Entry tier shown as starting price.",
+        },
+        {
+          id: "max-20x",
+          name: "Max (20x)",
+          pricePerSeatMonthly: 200,
+          isFreeTier: false,
+          planType: "subscription",
+          minSeats: 1,
+          maxSeats: 1,
+        },
+        {
+          id: "team-standard",
+          name: "Team Standard",
+          pricePerSeatMonthly: 20,
+          isFreeTier: false,
+          planType: "subscription",
+          minSeats: 3,
+          maxSeats: 999,
+        },
+        {
+          id: "team-premium",
+          name: "Team Premium",
+          pricePerSeatMonthly: 100,
+          isFreeTier: false,
+          planType: "subscription",
+          minSeats: 3,
+          maxSeats: 999,
+        },
+      ],
+    },
+    chatgpt: {
+      id: "chatgpt",
+      name: "ChatGPT",
+      category: "general-ai",
+      plans: [
+        {
+          id: "free",
+          name: "Free",
+          pricePerSeatMonthly: 0,
+          isFreeTier: true,
+          planType: "subscription",
+          minSeats: 1,
+          maxSeats: 1,
+        },
+        {
+          id: "plus",
+          name: "Plus",
+          pricePerSeatMonthly: 20,
+          isFreeTier: false,
+          planType: "subscription",
+          minSeats: 1,
+          maxSeats: 1,
+        },
+        {
+          id: "pro-100",
+          name: "Pro 100",
+          pricePerSeatMonthly: 100,
+          isFreeTier: false,
+          planType: "subscription",
+          minSeats: 1,
+          maxSeats: 1,
+        },
+        {
+          id: "pro-200",
+          name: "Pro 200",
+          pricePerSeatMonthly: 200,
+          isFreeTier: false,
+          planType: "subscription",
+          minSeats: 1,
+          maxSeats: 1,
+        },
+        {
+          id: "business",
+          name: "Business",
+          pricePerSeatMonthly: 20,
+          isFreeTier: false,
+          planType: "subscription",
+          minSeats: 3,
+          maxSeats: 999,
+        },
+      ],
+    },
+    "anthropic-api": {
+      id: "anthropic-api",
+      name: "Anthropic API",
+      category: "api",
+      plans: [
+        {
+          id: "haiku-4-5",
+          name: "Haiku 4.5",
+          pricePerSeatMonthly: 6,
+          isFreeTier: false,
+          planType: "api",
+          minSeats: 1,
+          maxSeats: 9999,
+        },
+        {
+          id: "sonnet-4-6",
+          name: "Sonnet 4.6",
+          pricePerSeatMonthly: 18,
+          isFreeTier: false,
+          planType: "api",
+          minSeats: 1,
+          maxSeats: 9999,
+        },
+        {
+          id: "opus-4-6",
+          name: "Opus 4.6",
+          pricePerSeatMonthly: 30,
+          isFreeTier: false,
+          planType: "api",
+          minSeats: 1,
+          maxSeats: 9999,
+        },
+      ],
+    },
+    "openai-api": {
+      id: "openai-api",
+      name: "OpenAI API",
+      category: "api",
+      plans: [
+        {
+          id: "gpt-5-4",
+          name: "GPT-5.4",
+          pricePerSeatMonthly: 12.5,
+          isFreeTier: false,
+          planType: "api",
+          minSeats: 1,
+          maxSeats: 9999,
+        },
+        {
+          id: "gpt-5-5",
+          name: "GPT-5.5",
+          pricePerSeatMonthly: 35,
+          isFreeTier: false,
+          planType: "api",
+          minSeats: 1,
+          maxSeats: 9999,
+        },
+        {
+          id: "gpt-4o-mini",
+          name: "GPT-4o Mini",
+          pricePerSeatMonthly: 0.375,
+          isFreeTier: false,
+          planType: "api",
+          minSeats: 1,
+          maxSeats: 9999,
         },
       ],
     },
     gemini: {
-      toolId: "gemini",
-      displayName: "Gemini",
-      category: "assistant",
-      alternatives: ["chatgpt", "claude"],
+      id: "gemini",
+      name: "Google Gemini",
+      category: "general-ai",
       plans: [
         {
-          id: "gemini_ai_plus",
-          name: "Google AI Plus",
+          id: "free",
+          name: "Free",
+          pricePerSeatMonthly: 0,
+          isFreeTier: true,
           planType: "subscription",
-          costModel: "flat",
-          currency: "USD",
-          monthlyFlat: 7.99,
           minSeats: 1,
           maxSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://one.google.com/about/google-ai-plans?hl=en-US&gl=US",
-          regionalPrices: {
-            US: {
-              currency: "USD",
-              monthlyFlat: 7.99,
-            },
-            IN: {
-              currency: "INR",
-              monthlyFlat: 399,
-            },
-          },
         },
         {
-          id: "gemini_ai_pro",
-          name: "Google AI Pro",
+          id: "plus",
+          name: "Gemini Plus",
+          pricePerSeatMonthly: 7.99,
+          isFreeTier: false,
           planType: "subscription",
-          costModel: "flat",
-          currency: "USD",
-          monthlyFlat: 19.99,
           minSeats: 1,
           maxSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://one.google.com/about/google-ai-plans?hl=en-US&gl=US",
-          regionalPrices: {
-            US: {
-              currency: "USD",
-              monthlyFlat: 19.99,
-            },
-            IN: {
-              currency: "INR",
-              monthlyFlat: 1950,
-            },
-          },
         },
         {
-          id: "gemini_ai_ultra",
-          name: "Google AI Ultra",
+          id: "pro",
+          name: "Gemini Pro",
+          pricePerSeatMonthly: 19.99,
+          isFreeTier: false,
           planType: "subscription",
-          costModel: "flat",
-          currency: "USD",
-          monthlyFlat: 249.99,
           minSeats: 1,
           maxSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://one.google.com/about/google-ai-plans?hl=en-US&gl=US",
-          regionalPrices: {
-            US: {
-              currency: "USD",
-              monthlyFlat: 249.99,
-            },
-            IN: {
-              currency: "INR",
-              monthlyFlat: 24500,
-            },
-          },
+        },
+        {
+          id: "ultra",
+          name: "Gemini Ultra",
+          pricePerSeatMonthly: 249.99,
+          isFreeTier: false,
+          planType: "subscription",
+          minSeats: 1,
+          maxSeats: 1,
         },
       ],
     },
-    openai_api: {
-      toolId: "openai_api",
-      displayName: "OpenAI API",
-      category: "api",
-      alternatives: ["anthropic_api"],
+    windsurf: {
+      id: "windsurf",
+      name: "Windsurf",
+      category: "coding-assistant",
       plans: [
         {
-          id: "openai_api_payg",
-          name: "Pay-as-you-go",
-          planType: "api",
-          costModel: "metered",
-          currency: "USD",
+          id: "free",
+          name: "Free (25 credits)",
+          pricePerSeatMonthly: 0,
+          isFreeTier: true,
+          planType: "subscription",
           minSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl: "https://openai.com/api/pricing",
-          apiPricing: {
-            model: "gpt-5.4",
-            inputPer1MTokens: 2.5,
-            outputPer1MTokens: 15,
-            cachedInputPer1MTokens: 0.25,
-            sourceUrl: "https://openai.com/api/pricing",
-          },
+          maxSeats: 1,
         },
-      ],
-      creditsOptions: [
         {
-          id: "openai_batch",
-          name: "Batch API",
-          discountPercent: 0.5,
-          minMonthlySpend: 100,
-          allowedUseCases: ["data", "research", "mixed"],
-          sourceUrl: "https://openai.com/api/pricing",
-          notes: "Batch API offers 50% discount for async workloads.",
-        },
-      ],
-    },
-    anthropic_api: {
-      toolId: "anthropic_api",
-      displayName: "Anthropic API",
-      category: "api",
-      alternatives: ["openai_api"],
-      plans: [
-        {
-          id: "anthropic_api_payg",
-          name: "Pay-as-you-go",
-          planType: "api",
-          costModel: "metered",
-          currency: "USD",
+          id: "pro",
+          name: "Pro (500 credits)",
+          pricePerSeatMonthly: 15,
+          isFreeTier: false,
+          planType: "subscription",
           minSeats: 1,
-          useCases: ALL_USE_CASES,
-          sourceUrl:
-            "https://platform.claude.com/docs/en/docs/about-claude/pricing",
-          apiPricing: {
-            model: "claude-sonnet-4.6",
-            inputPer1MTokens: 3,
-            outputPer1MTokens: 15,
-            cachedInputPer1MTokens: 0.3,
-            sourceUrl:
-              "https://platform.claude.com/docs/en/docs/about-claude/pricing",
-          },
+          maxSeats: 1,
         },
-      ],
-      creditsOptions: [
         {
-          id: "anthropic_batch",
-          name: "Batch API",
-          discountPercent: 0.5,
-          minMonthlySpend: 100,
-          allowedUseCases: ["data", "research", "mixed"],
-          sourceUrl:
-            "https://platform.claude.com/docs/en/docs/about-claude/pricing",
-          notes: "Batch API offers 50% discount for async workloads.",
+          id: "teams",
+          name: "Teams",
+          pricePerSeatMonthly: 30,
+          isFreeTier: false,
+          planType: "subscription",
+          minSeats: 3,
+          maxSeats: 999,
+        },
+        {
+          id: "enterprise",
+          name: "Enterprise",
+          pricePerSeatMonthly: 60,
+          isFreeTier: false,
+          planType: "subscription",
+          minSeats: 10,
+          maxSeats: 9999,
         },
       ],
     },
   },
 };
+
+export function getToolById(toolId: ToolId): Tool {
+  const tool = pricingData.tools[toolId];
+  if (!tool) {
+    throw new Error(`Tool not found: ${toolId}`);
+  }
+  return tool;
+}
+
+export function getPlanById(toolId: ToolId, planId: PlanId): Plan {
+  const tool = getToolById(toolId);
+  const plan = tool.plans.find((p) => p.id === planId);
+  if (!plan) {
+    throw new Error(`Plan not found for tool ${toolId}: ${planId}`);
+  }
+  return plan;
+}
+
+export function getDefaultPlanId(toolId: ToolId): PlanId {
+  const tool = getToolById(toolId);
+  const freePlan = tool.plans.find((p) => p.isFreeTier);
+  return freePlan ? freePlan.id : tool.plans[0]!.id;
+}

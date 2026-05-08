@@ -1,5 +1,9 @@
+// New spec exports
+export * from "./pricing-data";
+export { runAudit, auditTool } from "./engine";
+
+// Legacy exports for backward compatibility
 export { pricingData } from "./pricing-data";
-export { auditTool, runAudit } from "./engine";
 export { countryOptions, getCountryConfig } from "./locations";
 export { formatCurrency, getPlanMonthlyCost, resolvePlanPricing } from "./pricing";
 export type {

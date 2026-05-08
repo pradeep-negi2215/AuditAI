@@ -1,404 +1,301 @@
-import { pricingData } from "./pricing-data";
-import { getCountryConfig } from "./locations";
-import { getPlanMonthlyCost, resolvePlanPricing, roundMoney } from "./pricing";
-import type {
-  AuditReport,
-  AuditTotalsByCurrency,
-  BillingCycle,
-  PricingPlan,
-  Recommendation,
-  SpendInput,
-  ToolAudit,
-  ToolPricing,
-  UseCase,
-} from "./types";
+import {
+  type AuditReport,
+  type AuditResult,
+  type SpendInput,
+  type Plan,
+  countryCurrencies,
+  getToolById,
+  getPlanById,
+} from "./pricing-data";
 
 const MIN_SAVINGS_THRESHOLD = 1;
-const ALT_SAVINGS_MIN_DELTA = 25;
 
-const isPlanEligible = (plan: PricingPlan, seats: number, useCase: UseCase) => {
-  if (seats < plan.minSeats) {
-    return false;
-  }
-  if (plan.maxSeats !== undefined && seats > plan.maxSeats) {
-    return false;
-  }
-  return plan.useCases.includes(useCase);
-};
+function roundMoney(amount: number): number {
+  return Math.round(amount * 100) / 100;
+}
 
-const resolveCurrentMonthlyCost = (
-  spend: SpendInput,
-  plan: PricingPlan,
-) => {
-  if (spend.monthlySpend !== undefined && spend.monthlySpend > 0) {
-    return roundMoney(spend.monthlySpend);
-  }
+function calculatePlanCost(plan: Plan, seats: number): number {
+  return roundMoney(plan.pricePerSeatMonthly * seats);
+}
 
-  if (plan.costModel === "metered") {
-    return 0;
-  }
-
-  return getPlanMonthlyCost(
-    plan,
-    spend.seats,
-    spend.billingCycle,
-    spend.country,
-  ).monthlyCost;
-};
-
-const getCheapestPlan = (
-  tool: ToolPricing,
-  seats: number,
-  useCase: UseCase,
-  billingCycle: BillingCycle,
-  allowFreeTier: boolean,
-  country: SpendInput["country"],
-  currency: Recommendation["currency"],
-) => {
-  const eligiblePlans = tool.plans.filter(
-    (plan) =>
-      plan.planType === "subscription" && isPlanEligible(plan, seats, useCase),
-  );
-
-  const filteredPlans = allowFreeTier
-    ? eligiblePlans
-    : eligiblePlans.filter((plan) => !plan.isFreeTier);
-
-  if (filteredPlans.length === 0) {
-    return undefined;
-  }
-
-  const matchingCurrencyPlans = filteredPlans.filter((plan) =>
-    getPlanMonthlyCost(plan, seats, billingCycle, country).currency === currency,
-  );
-
-  if (matchingCurrencyPlans.length === 0) {
-    return undefined;
-  }
-
-  return matchingCurrencyPlans.reduce((cheapest, plan) => {
-    const cheapestCost = getPlanMonthlyCost(
-      cheapest,
-      seats,
-      billingCycle,
-      country,
-    ).monthlyCost;
-    const candidateCost = getPlanMonthlyCost(
-      plan,
-      seats,
-      billingCycle,
-      country,
-    ).monthlyCost;
-    return candidateCost < cheapestCost ? plan : cheapest;
-  }, matchingCurrencyPlans[0]);
-};
-
-const buildRecommendation = (
-  candidate: Recommendation,
-  currentMonthlyCost: number,
-  reasons: string[],
-): { recommendation: Recommendation; savingsMonthly: number; reasons: string[] } => {
-  const savingsMonthly = roundMoney(currentMonthlyCost - candidate.monthlyCost);
-  return {
-    recommendation: candidate,
-    savingsMonthly: savingsMonthly > 0 ? savingsMonthly : 0,
-    reasons,
-  };
-};
-
-export const auditTool = (spend: SpendInput): ToolAudit => {
-  const tool = pricingData.tools[spend.toolId];
-  if (!tool) {
-    throw new Error(`Unknown toolId: ${spend.toolId}`);
-  }
-
-  const currentPlan = tool.plans.find((plan) => plan.id === spend.planId);
-  if (!currentPlan) {
-    throw new Error(`Unknown planId: ${spend.planId} for ${tool.displayName}`);
-  }
-
-  const currentPricing = resolvePlanPricing(currentPlan, spend.country);
-  const currentMonthlyCost = resolveCurrentMonthlyCost(spend, currentPlan);
+function auditToolHelper(input: SpendInput): AuditResult {
+  const tool = getToolById(input.toolId);
+  const currentPlan = getPlanById(input.toolId, input.currentPlanId);
+  const currency = countryCurrencies[input.country];
+  const reasons: string[] = [];
   const flags: string[] = [];
-  const baseReasons: string[] = [];
 
-  if (currentPricing.usedFallback) {
-    flags.push("pricing-location-fallback");
-    const countryConfig = getCountryConfig(spend.country);
-    if (countryConfig) {
-      baseReasons.push(
-        `Pricing for ${countryConfig.label} is not available. Using ${currentPricing.currency} pricing instead.`,
-      );
+  // Determine current spend - only calculate from plan if monthlySpend not explicitly provided
+  let currentSpendMonthly = 0;
+  const explicitSpendProvided = input.monthlySpend !== undefined && input.monthlySpend !== 0;
+
+  if (explicitSpendProvided) {
+    currentSpendMonthly = input.monthlySpend ?? 0;
+  } else if (currentPlan.planType === "subscription") {
+    // Only calculate from plan if subscription and no explicit spend
+    currentSpendMonthly = calculatePlanCost(currentPlan, input.seats);
+  }
+
+  currentSpendMonthly = roundMoney(currentSpendMonthly);
+
+  // Rule 1: Check if user should use free tier (only if they didn't explicitly state a spend)
+  if (!explicitSpendProvided && currentSpendMonthly > 0 && !currentPlan.isFreeTier) {
+    const freePlans = tool.plans.filter((p) => p.isFreeTier);
+    if (freePlans.length > 0) {
+      const freePlan = freePlans[0]!;
+      if (
+        freePlan.minSeats <= input.seats &&
+        (freePlan.maxSeats === 999999 || freePlan.maxSeats >= input.seats)
+      ) {
+        return {
+          toolId: input.toolId,
+          toolName: tool.name,
+          currentPlanName: currentPlan.name,
+          currentSpendMonthly,
+          recommended: {
+            planName: freePlan.name,
+            spendMonthly: 0,
+            reason: `Your usage is eligible for the free ${freePlan.name} plan.`,
+          },
+          savingsMonthly: roundMoney(currentSpendMonthly),
+          savingsAnnual: roundMoney(currentSpendMonthly * 12),
+          currency,
+          reasons: [
+            `The ${freePlan.name} plan is free and covers your team size of ${input.seats}.`,
+            `You can save $${currentSpendMonthly.toFixed(2)}/month by switching.`,
+          ],
+          flags: ["free-plan-eligible"],
+        };
+      }
     }
   }
 
-  if (!isPlanEligible(currentPlan, spend.seats, spend.useCase)) {
-    flags.push("plan-mismatch");
-    baseReasons.push(
-      `Current plan does not support ${spend.seats} seats for ${spend.useCase}.`,
+  // Rule 2: Check if team plan is overkill (< 3 seats on team plan)
+  if (
+    currentPlan.minSeats >= 3 &&
+    input.seats < 3 &&
+    input.seats === input.teamSize &&
+    currentSpendMonthly > 0
+  ) {
+    const individualPlans = tool.plans.filter(
+      (p) => p.minSeats === 1 && !p.isFreeTier && p.planType === "subscription",
     );
-  }
-
-  const comparableCurrentMonthlyCost =
-    !spend.monthlySpend && !isPlanEligible(currentPlan, spend.seats, spend.useCase)
-      ? (() => {
-          const fallbackPlan = getCheapestPlan(
-            tool,
-            spend.seats,
-            spend.useCase,
-            spend.billingCycle,
-            false,
-            spend.country,
-            currentPricing.currency,
-          );
-
-          if (!fallbackPlan) {
-            return currentMonthlyCost;
-          }
-
-          return getPlanMonthlyCost(
-            fallbackPlan,
-            spend.seats,
-            spend.billingCycle,
-            spend.country,
-          ).monthlyCost;
-        })()
-      : currentMonthlyCost;
-
-  const allowFreeTier = currentPlan.isFreeTier || currentMonthlyCost === 0;
-
-  const candidates: Array<{
-    recommendation: Recommendation;
-    reasons: string[];
-    savingsMonthly: number;
-  }> = [];
-
-  const cheapestSameVendor = getCheapestPlan(
-    tool,
-    spend.seats,
-    spend.useCase,
-    spend.billingCycle,
-    allowFreeTier,
-    spend.country,
-    currentPricing.currency,
-  );
-
-  if (cheapestSameVendor && cheapestSameVendor.id !== currentPlan.id) {
-    const monthlyCost = getPlanMonthlyCost(
-      cheapestSameVendor,
-      spend.seats,
-      spend.billingCycle,
-      spend.country,
-    ).monthlyCost;
-    const recommendation: Recommendation = {
-      toolId: tool.toolId,
-      toolName: tool.displayName,
-      planId: cheapestSameVendor.id,
-      planName: cheapestSameVendor.name,
-      monthlyCost,
-      currency: currentPricing.currency,
-      type: "same-vendor",
-    };
-
-    candidates.push(
-      buildRecommendation(recommendation, comparableCurrentMonthlyCost, [
-        ...baseReasons,
-        "Cheaper plan available for the same vendor.",
-      ]),
-    );
-  }
-
-  if (tool.alternatives && tool.alternatives.length > 0) {
-    tool.alternatives.forEach((altId) => {
-      const altTool = pricingData.tools[altId];
-      if (!altTool) {
-        return;
+    if (individualPlans.length > 0) {
+      const cheapestIndividual = individualPlans.reduce((prev, curr) =>
+        calculatePlanCost(curr, 1) < calculatePlanCost(prev, 1)
+          ? curr
+          : prev,
+      );
+      const savingsMonthly = roundMoney(
+        currentSpendMonthly - calculatePlanCost(cheapestIndividual, input.seats),
+      );
+      if (savingsMonthly >= MIN_SAVINGS_THRESHOLD) {
+        return {
+          toolId: input.toolId,
+          toolName: tool.name,
+          currentPlanName: currentPlan.name,
+          currentSpendMonthly,
+          recommended: {
+            planName: cheapestIndividual.name,
+            spendMonthly: calculatePlanCost(cheapestIndividual, input.seats),
+            reason: `Team plan unnecessary for ${input.seats} seat(s). Individual plan is cheaper.`,
+          },
+          savingsMonthly,
+          savingsAnnual: roundMoney(savingsMonthly * 12),
+          currency,
+          reasons: [
+            `Current plan requires minimum ${currentPlan.minSeats} seats. You only have ${input.seats}.`,
+            `Switching to ${cheapestIndividual.name} plan would save $${savingsMonthly.toFixed(2)}/month.`,
+          ],
+          flags: ["team-plan-overkill"],
+        };
       }
+    }
+  }
+
+  // Rule 3: Check for cheaper same-vendor plan (subscription only)
+  // When explicit spend is provided, exclude free tier
+  if (currentPlan.planType === "subscription") {
+    const eligiblePlans = tool.plans.filter(
+      (p) =>
+        p.planType === "subscription" &&
+        p.minSeats <= input.seats &&
+        (p.maxSeats === 999999 || p.maxSeats >= input.seats) &&
+        p.id !== currentPlan.id &&
+        (!explicitSpendProvided ? true : !p.isFreeTier), // Exclude free if explicit spend provided
+    );
+
+    const cheaperPlans = eligiblePlans.filter((p) => {
+      const planCost = calculatePlanCost(p, input.seats);
+      return planCost < currentSpendMonthly;
+    });
+
+    if (cheaperPlans.length > 0) {
+      const bestCheaper = cheaperPlans.reduce((prev, curr) => {
+        const prevCost = calculatePlanCost(prev, input.seats);
+        const currCost = calculatePlanCost(curr, input.seats);
+        return currCost < prevCost ? curr : prev;
+      });
+
+      const savingsMonthly = roundMoney(
+        currentSpendMonthly - calculatePlanCost(bestCheaper, input.seats),
+      );
+
+      if (savingsMonthly >= MIN_SAVINGS_THRESHOLD) {
+        return {
+          toolId: input.toolId,
+          toolName: tool.name,
+          currentPlanName: currentPlan.name,
+          currentSpendMonthly,
+          recommended: {
+            planName: bestCheaper.name,
+            spendMonthly: calculatePlanCost(bestCheaper, input.seats),
+            reason: `${bestCheaper.name} plan offers the same features at a lower price.`,
+          },
+          savingsMonthly,
+          savingsAnnual: roundMoney(savingsMonthly * 12),
+          currency,
+          reasons: [
+            `You are on the ${currentPlan.name} plan.`,
+            `The ${bestCheaper.name} plan is cheaper for your team size of ${input.seats} seats.`,
+          ],
+          flags: [],
+        };
+      }
+    }
+  }
+
+  // Rule 4: Check for alternative tools with better pricing
+  const alternativeTools: Array<{ tool: string; toolId: string }> = [];
+
+  if (input.useCase === "coding") {
+    alternativeTools.push(
+      { tool: "Cursor", toolId: "cursor" },
+      {
+        tool: "GitHub Copilot",
+        toolId: "github-copilot",
+      },
+      { tool: "Windsurf", toolId: "windsurf" },
+    );
+  } else if (input.useCase === "writing" || input.useCase === "research") {
+    alternativeTools.push(
+      { tool: "Claude", toolId: "claude" },
+      { tool: "ChatGPT", toolId: "chatgpt" },
+      { tool: "Google Gemini", toolId: "gemini" },
+    );
+  }
+
+  for (const { tool: altToolName, toolId: altToolId } of alternativeTools) {
+    if (altToolId === input.toolId) continue;
+
+    try {
+      const altTool = getToolById(altToolId as any);
 
       const altEligiblePlans = altTool.plans.filter(
-        (plan) =>
-          plan.planType === "subscription" &&
-          isPlanEligible(plan, spend.seats, spend.useCase),
-      );
-      const hasCurrencyMatch = altEligiblePlans.some(
-        (plan) =>
-          getPlanMonthlyCost(plan, spend.seats, spend.billingCycle, spend.country)
-            .currency === currentPricing.currency,
+        (p) =>
+          p.planType === "subscription" &&
+          p.minSeats <= input.seats &&
+          (p.maxSeats === 999999 || p.maxSeats >= input.seats),
       );
 
-      if (!hasCurrencyMatch) {
-        if (altEligiblePlans.length > 0) {
-          flags.push("currency-mismatch");
-        }
-        return;
-      }
+      if (altEligiblePlans.length === 0) continue;
 
-      const cheapestAltPlan = getCheapestPlan(
-        altTool,
-        spend.seats,
-        spend.useCase,
-        spend.billingCycle,
-        allowFreeTier,
-        spend.country,
-        currentPricing.currency,
-      );
+      const cheapestAlt = altEligiblePlans.reduce((prev, curr) => {
+        const prevCost = calculatePlanCost(prev, input.seats);
+        const currCost = calculatePlanCost(curr, input.seats);
+        return currCost < prevCost ? curr : prev;
+      });
 
-      if (!cheapestAltPlan) {
-        return;
-      }
+      const altCost = calculatePlanCost(cheapestAlt, input.seats);
+      const savingsMonthly = roundMoney(currentSpendMonthly - altCost);
 
-      const altMonthlyCost = getPlanMonthlyCost(
-        cheapestAltPlan,
-        spend.seats,
-        spend.billingCycle,
-        spend.country,
-      ).monthlyCost;
-
-      const recommendation: Recommendation = {
-        toolId: altTool.toolId,
-        toolName: altTool.displayName,
-        planId: cheapestAltPlan.id,
-        planName: cheapestAltPlan.name,
-        monthlyCost: altMonthlyCost,
-        currency: currentPricing.currency,
-        type: "alternative",
-      };
-
-      candidates.push(
-        buildRecommendation(recommendation, comparableCurrentMonthlyCost, [
-          ...baseReasons,
-          "Comparable capability with lower monthly cost.",
-        ]),
-      );
-    });
-  }
-
-  if (tool.creditsOptions && tool.creditsOptions.length > 0) {
-    tool.creditsOptions.forEach((option) => {
-      if (
-        currentMonthlyCost >= option.minMonthlySpend &&
-        option.allowedUseCases.includes(spend.useCase)
-      ) {
-        const discountedCost = roundMoney(
-          currentMonthlyCost * (1 - option.discountPercent),
-        );
-
-        const recommendation: Recommendation = {
-          toolId: tool.toolId,
-          toolName: tool.displayName,
-          planId: currentPlan.id,
-          planName: `${currentPlan.name} (${option.name})`,
-          monthlyCost: discountedCost,
-          currency: currentPricing.currency,
-          type: "credits",
+      if (savingsMonthly >= MIN_SAVINGS_THRESHOLD) {
+        return {
+          toolId: input.toolId,
+          toolName: tool.name,
+          currentPlanName: currentPlan.name,
+          currentSpendMonthly,
+          recommended: {
+            planName: `${altToolName} ${cheapestAlt.name}`,
+            spendMonthly: altCost,
+            reason: `${altToolName} offers comparable capabilities at a lower cost.`,
+          },
+          savingsMonthly,
+          savingsAnnual: roundMoney(savingsMonthly * 12),
+          currency,
+          reasons: [
+            `For ${input.useCase} use cases, ${altToolName} is a viable alternative.`,
+            `Their ${cheapestAlt.name} plan costs $${altCost.toFixed(2)}/month vs your current $${currentSpendMonthly.toFixed(2)}/month.`,
+          ],
+          flags: ["alternative-tool-available"],
         };
-
-        candidates.push(
-          buildRecommendation(recommendation, comparableCurrentMonthlyCost, [
-            ...baseReasons,
-            `Use ${option.name} pricing for eligible workloads.`,
-          ]),
-        );
       }
-    });
-  }
-
-  const filteredCandidates = candidates.filter(
-    (candidate) => candidate.savingsMonthly >= MIN_SAVINGS_THRESHOLD,
-  );
-
-  const bestSameVendor = filteredCandidates
-    .filter(
-      (candidate) =>
-        candidate.recommendation.type === "same-vendor" ||
-        candidate.recommendation.type === "credits",
-    )
-    .sort((a, b) => b.savingsMonthly - a.savingsMonthly)[0];
-
-  const bestAlternative = filteredCandidates
-    .filter((candidate) => candidate.recommendation.type === "alternative")
-    .sort((a, b) => b.savingsMonthly - a.savingsMonthly)[0];
-
-  let bestCandidate = bestSameVendor;
-  if (bestAlternative) {
-    if (!bestSameVendor) {
-      bestCandidate = bestAlternative;
-    } else if (
-      bestAlternative.savingsMonthly - bestSameVendor.savingsMonthly >=
-      ALT_SAVINGS_MIN_DELTA
-    ) {
-      bestCandidate = bestAlternative;
+    } catch {
+      // Tool not found, skip
+      continue;
     }
   }
 
-  const defaultRecommendation: Recommendation = {
-    toolId: tool.toolId,
-    toolName: tool.displayName,
-    planId: currentPlan.id,
-    planName: currentPlan.name,
-    monthlyCost: comparableCurrentMonthlyCost,
-    currency: currentPricing.currency,
-    type: "none",
-  };
-
-  const recommendation = bestCandidate
-    ? bestCandidate.recommendation
-    : defaultRecommendation;
-
-  const savingsMonthly = bestCandidate ? bestCandidate.savingsMonthly : 0;
-  const savingsAnnual = roundMoney(savingsMonthly * 12);
-  const reasons = bestCandidate
-    ? bestCandidate.reasons
-    : ["Current plan is cost effective for your inputs."];
-
+  // No optimization found
   return {
-    toolId: tool.toolId,
-    toolName: tool.displayName,
-    currency: currentPricing.currency,
-    pricingCountry: spend.country,
-    currentPlanId: currentPlan.id,
+    toolId: input.toolId,
+    toolName: tool.name,
     currentPlanName: currentPlan.name,
-    currentMonthlyCost: comparableCurrentMonthlyCost,
-    recommended: recommendation,
-    savingsMonthly,
-    savingsAnnual,
-    reasons,
-    flags,
+    currentSpendMonthly,
+    recommended: null,
+    savingsMonthly: 0,
+    savingsAnnual: 0,
+    currency,
+    reasons: [
+      `You are on an appropriate plan for your ${input.useCase} use case and team size.`,
+    ],
+    flags: ["already-optimal"],
   };
-};
+}
 
-export const runAudit = (spendInputs: SpendInput[]): AuditReport => {
-  const results = spendInputs.map((input) => auditTool(input));
+export function runAudit(inputs: SpendInput[]): AuditReport {
+  const results = inputs.map((input) => auditToolHelper(input));
 
-  const totalsMap = new Map<string, AuditTotalsByCurrency>();
+  // Calculate totals by currency
+  const currencyTotals: Record<
+    string,
+    { savingsMonthly: number; savingsAnnual: number }
+  > = {};
+
   results.forEach((result) => {
-    const existing = totalsMap.get(result.currency) ?? {
-      currency: result.currency,
-      currentMonthly: 0,
-      recommendedMonthly: 0,
-      savingsMonthly: 0,
-      savingsAnnual: 0,
-    };
-
-    existing.currentMonthly = roundMoney(
-      existing.currentMonthly + result.currentMonthlyCost,
+    if (!currencyTotals[result.currency]) {
+      currencyTotals[result.currency] = {
+        savingsMonthly: 0,
+        savingsAnnual: 0,
+      };
+    }
+    currencyTotals[result.currency]!.savingsMonthly = roundMoney(
+      currencyTotals[result.currency]!.savingsMonthly + result.savingsMonthly,
     );
-    existing.recommendedMonthly = roundMoney(
-      existing.recommendedMonthly + result.recommended.monthlyCost,
+    currencyTotals[result.currency]!.savingsAnnual = roundMoney(
+      currencyTotals[result.currency]!.savingsAnnual + result.savingsAnnual,
     );
-    existing.savingsMonthly = roundMoney(
-      existing.savingsMonthly + result.savingsMonthly,
-    );
-    existing.savingsAnnual = roundMoney(existing.savingsMonthly * 12);
-
-    totalsMap.set(result.currency, existing);
   });
 
-  const totalsByCurrency = Array.from(totalsMap.values());
+  const totalsByCurrency = Object.entries(currencyTotals).map(
+    ([currency, totals]) => ({
+      currency,
+      savingsMonthly: totals.savingsMonthly,
+      savingsAnnual: totals.savingsAnnual,
+    }),
+  );
+
+  const hasMixedCurrency = totalsByCurrency.length > 1;
 
   return {
     results,
     totalsByCurrency,
-    hasMixedCurrency: totalsByCurrency.length > 1,
+    hasMixedCurrency,
+    generatedAt: new Date().toISOString(),
   };
-};
+}
+
+// Legacy export for backward compatibility
+export function auditTool(input: SpendInput): AuditResult {
+  return auditToolHelper(input);
+}

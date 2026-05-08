@@ -1,129 +1,228 @@
 import { describe, expect, it } from "vitest";
-import { auditTool, runAudit } from "../engine";
+import { runAudit } from "../engine";
+import type { SpendInput } from "../pricing-data";
 
-const baseInput = {
+const baseInput: Omit<SpendInput, "toolId" | "currentPlanId"> = {
   seats: 1,
   teamSize: 1,
-  billingCycle: "monthly" as const,
-  useCase: "coding" as const,
+  useCase: "coding",
+  country: "US",
+  billingCycle: "monthly",
 };
 
-describe("auditTool", () => {
-  it("recommends a cheaper same-vendor plan", () => {
-    const result = auditTool({
-      ...baseInput,
-      toolId: "cursor",
-      planId: "cursor_pro_plus",
-      monthlySpend: 60,
-    });
-
-    expect(result.recommended.planId).toBe("cursor_pro");
-    expect(result.savingsMonthly).toBe(40);
-  });
-
-  it("recommends a cheaper alternative tool", () => {
-    const result = auditTool({
-      toolId: "cursor",
-      planId: "cursor_teams",
-      monthlySpend: 200,
-      seats: 5,
-      teamSize: 5,
-      billingCycle: "monthly",
-      useCase: "coding",
-    });
-
-    expect(result.recommended.toolId).toBe("copilot");
-    expect(result.recommended.planId).toBe("copilot_pro");
-    expect(result.savingsMonthly).toBe(150);
-  });
-
-  it("downgrades an overpriced tier", () => {
-    const result = auditTool({
-      toolId: "windsurf",
-      planId: "windsurf_max",
-      monthlySpend: 200,
-      seats: 1,
-      teamSize: 1,
-      billingCycle: "monthly",
-      useCase: "coding",
-    });
-
-    expect(result.recommended.planId).toBe("windsurf_pro");
-    expect(result.savingsMonthly).toBe(180);
-  });
-
-  it("applies batch discount for API spend", () => {
-    const result = auditTool({
-      toolId: "openai_api",
-      planId: "openai_api_payg",
-      monthlySpend: 1000,
-      seats: 1,
-      teamSize: 1,
-      billingCycle: "monthly",
-      useCase: "data",
-    });
-
-    expect(result.recommended.type).toBe("credits");
-    expect(result.savingsMonthly).toBe(500);
-  });
-
-  it("uses country-based pricing for Gemini in India", () => {
-    const result = auditTool({
-      toolId: "gemini",
-      planId: "gemini_ai_pro",
-      monthlySpend: 0,
-      seats: 1,
-      teamSize: 1,
-      billingCycle: "monthly",
-      useCase: "mixed",
-      country: "IN",
-    });
-
-    expect(result.currentMonthlyCost).toBe(1950);
-    expect(result.currency).toBe("INR");
-  });
-
-  it("treats an invalid current plan as the team-sized baseline", () => {
-    const result = auditTool({
-      toolId: "cursor",
-      planId: "cursor_pro",
-      monthlySpend: 0,
-      seats: 14,
-      teamSize: 14,
-      billingCycle: "monthly",
-      useCase: "coding",
-    });
-
-    expect(result.flags).toContain("plan-mismatch");
-    expect(result.savingsMonthly).toBeGreaterThan(0);
-    expect(result.recommended.toolId).toBe("copilot");
-  });
-});
-
 describe("runAudit", () => {
-  it("reports mixed currency totals", () => {
-    const report = runAudit([
+  it("Test 1: Team plan overkill - recommends cheaper individual plan", () => {
+    const inputs: SpendInput[] = [
       {
-        toolId: "chatgpt",
-        planId: "chatgpt_go",
-        monthlySpend: 399,
-        seats: 1,
-        teamSize: 1,
-        billingCycle: "monthly",
-        useCase: "writing",
-      },
-      {
-        toolId: "cursor",
-        planId: "cursor_pro",
-        monthlySpend: 20,
-        seats: 1,
-        teamSize: 1,
-        billingCycle: "monthly",
+        ...baseInput,
+        toolId: "github-copilot",
+        currentPlanId: "business",
+        seats: 2,
+        teamSize: 2,
         useCase: "coding",
+        monthlySpend: 38, // Business for 2 seats: $19 * 2 = $38
       },
-    ]);
+    ];
 
-    expect(report.hasMixedCurrency).toBe(true);
-    expect(report.totalsByCurrency.length).toBe(2);
+    const result = runAudit(inputs);
+
+    expect(result.results).toHaveLength(1);
+    const audit = result.results[0]!;
+
+    expect(audit.toolId).toBe("github-copilot");
+    expect(audit.currentPlanName).toBe("Business");
+    expect(audit.recommended).not.toBeNull();
+    expect(audit.recommended?.planName).toBe("Pro");
+    // Pro for 2 seats: $10 * 2 = $20
+    // Savings: $38 - $20 = $18/month
+    expect(audit.savingsMonthly).toBe(18);
+    expect(audit.flags).toContain("team-plan-overkill");
+  });
+
+  it("Test 2: Already optimal - no optimization available", () => {
+    const inputs: SpendInput[] = [
+      {
+        ...baseInput,
+        toolId: "claude",
+        currentPlanId: "max-5x",
+        seats: 1,
+        teamSize: 1,
+        useCase: "writing",
+        monthlySpend: 100, // On max plan
+      },
+    ];
+
+    // Check what options exist for Claude max-5x
+    // The engine should find alternatives like Claude Max-20x (more expensive)
+    // or cheaper options like Claude Pro or free
+    // So this ISN'T actually optimal - there's a free tier
+    // Let's instead use a test where truly optimal (no free tier in alternatives)
+    
+    // Better test: Use API tool where there's truly no cheaper option
+    const apiInputs: SpendInput[] = [
+      {
+        ...baseInput,
+        toolId: "anthropic-api",
+        currentPlanId: "haiku-4-5",
+        seats: 1,
+        teamSize: 1,
+        useCase: "api-integration",
+        monthlySpend: 6,
+      },
+    ];
+
+    const result = runAudit(apiInputs);
+
+    expect(result.results).toHaveLength(1);
+    const audit = result.results[0]!;
+
+    // Haiku is the cheapest anthropic model, API plans can't use free tier logic
+    expect(audit.recommended).toBeNull();
+    expect(audit.savingsMonthly).toBe(0);
+    expect(audit.flags).toContain("already-optimal");
+  });
+
+  it("Test 3: Free plan eligible - no spend provided, so free tier recommended", () => {
+    const inputs: SpendInput[] = [
+      {
+        ...baseInput,
+        toolId: "windsurf",
+        currentPlanId: "pro",
+        seats: 1,
+        teamSize: 1,
+        useCase: "coding",
+        // No monthlySpend provided - engine will calculate $15 from plan, then recommend free
+      },
+    ];
+
+    const result = runAudit(inputs);
+
+    expect(result.results).toHaveLength(1);
+    const audit = result.results[0]!;
+
+    expect(audit.recommended?.planName).toBe("Free (25 credits)");
+    expect(audit.savingsMonthly).toBe(15);
+    expect(audit.flags).toContain("free-plan-eligible");
+  });
+
+  it("Test 4: Cheaper plan for explicit spend - recommend lower-cost paid alternative", () => {
+    const inputs: SpendInput[] = [
+      {
+        ...baseInput,
+        toolId: "cursor",
+        currentPlanId: "pro-plus",
+        seats: 1,
+        teamSize: 1,
+        useCase: "coding",
+        monthlySpend: 60, // Pro+ is $60
+      },
+    ];
+
+    const result = runAudit(inputs);
+
+    expect(result.results).toHaveLength(1);
+    const audit = result.results[0]!;
+
+    // Should recommend Pro at $20, saving $40/month
+    expect(audit.recommended?.planName).toBe("Pro");
+    expect(audit.savingsMonthly).toBe(40);
+  });
+
+  it("Test 5: Alternative tool - writing user gets cheaper writing alternative", () => {
+    const inputs: SpendInput[] = [
+      {
+        ...baseInput,
+        toolId: "claude",
+        currentPlanId: "max-5x",
+        seats: 1,
+        teamSize: 1,
+        useCase: "writing",
+        monthlySpend: 100,
+      },
+    ];
+
+    const result = runAudit(inputs);
+
+    expect(result.results).toHaveLength(1);
+    const audit = result.results[0]!;
+
+    // Claude Max-5x is $100, should find cheaper writing alternative
+    expect(audit.recommended).not.toBeNull();
+    expect(audit.savingsMonthly).toBeGreaterThan(0);
+  });
+
+  it("Test 6: Total savings calculation - multiple tools with correct currency totals", () => {
+    const inputs: SpendInput[] = [
+      {
+        ...baseInput,
+        toolId: "cursor",
+        currentPlanId: "pro-plus",
+        seats: 1,
+        teamSize: 1,
+        monthlySpend: 60,
+      },
+      {
+        ...baseInput,
+        toolId: "claude",
+        currentPlanId: "pro",
+        seats: 1,
+        teamSize: 1,
+        useCase: "writing",
+        monthlySpend: 20,
+      },
+      {
+        ...baseInput,
+        toolId: "chatgpt",
+        currentPlanId: "plus",
+        seats: 1,
+        teamSize: 1,
+        useCase: "writing",
+        monthlySpend: 20,
+      },
+    ];
+
+    const result = runAudit(inputs);
+
+    expect(result.results).toHaveLength(3);
+
+    // Check totalsByCurrency
+    expect(result.totalsByCurrency.length).toBeGreaterThan(0);
+    const usdTotal = result.totalsByCurrency.find((t) => t.currency === "USD");
+    expect(usdTotal).toBeDefined();
+    if (usdTotal) {
+      expect(usdTotal.savingsAnnual).toBe(usdTotal.savingsMonthly * 12);
+    }
+  });
+
+  it("Test 7: Mixed currency detection - USD and INR tools show hasMixedCurrency", () => {
+    const inputs: SpendInput[] = [
+      {
+        ...baseInput,
+        toolId: "cursor",
+        currentPlanId: "pro",
+        seats: 1,
+        teamSize: 1,
+        country: "US",
+        monthlySpend: 20,
+      },
+      {
+        ...baseInput,
+        toolId: "gemini",
+        currentPlanId: "plus",
+        seats: 1,
+        teamSize: 1,
+        country: "IN",
+        useCase: "writing",
+        monthlySpend: 799,
+      },
+    ];
+
+    const result = runAudit(inputs);
+
+    expect(result.results).toHaveLength(2);
+    expect(result.hasMixedCurrency).toBe(true);
+    const currencies = result.totalsByCurrency.map((t) => t.currency);
+    expect(currencies).toContain("USD");
+    expect(currencies).toContain("INR");
   });
 });
