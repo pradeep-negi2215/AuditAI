@@ -82,6 +82,22 @@ describe("auditTool", () => {
     expect(result.currentMonthlyCost).toBe(1950);
     expect(result.currency).toBe("INR");
   });
+
+  it("treats an invalid current plan as the team-sized baseline", () => {
+    const result = auditTool({
+      toolId: "cursor",
+      planId: "cursor_pro",
+      monthlySpend: 0,
+      seats: 14,
+      teamSize: 14,
+      billingCycle: "monthly",
+      useCase: "coding",
+    });
+
+    expect(result.flags).toContain("plan-mismatch");
+    expect(result.savingsMonthly).toBeGreaterThan(0);
+    expect(result.recommended.toolId).toBe("copilot");
+  });
 });
 
 describe("runAudit", () => {

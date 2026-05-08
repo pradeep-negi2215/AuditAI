@@ -139,6 +139,32 @@ export const auditTool = (spend: SpendInput): ToolAudit => {
     );
   }
 
+  const comparableCurrentMonthlyCost =
+    !spend.monthlySpend && !isPlanEligible(currentPlan, spend.seats, spend.useCase)
+      ? (() => {
+          const fallbackPlan = getCheapestPlan(
+            tool,
+            spend.seats,
+            spend.useCase,
+            spend.billingCycle,
+            false,
+            spend.country,
+            currentPricing.currency,
+          );
+
+          if (!fallbackPlan) {
+            return currentMonthlyCost;
+          }
+
+          return getPlanMonthlyCost(
+            fallbackPlan,
+            spend.seats,
+            spend.billingCycle,
+            spend.country,
+          ).monthlyCost;
+        })()
+      : currentMonthlyCost;
+
   const allowFreeTier = currentPlan.isFreeTier || currentMonthlyCost === 0;
 
   const candidates: Array<{
@@ -175,7 +201,7 @@ export const auditTool = (spend: SpendInput): ToolAudit => {
     };
 
     candidates.push(
-      buildRecommendation(recommendation, currentMonthlyCost, [
+      buildRecommendation(recommendation, comparableCurrentMonthlyCost, [
         ...baseReasons,
         "Cheaper plan available for the same vendor.",
       ]),
@@ -239,7 +265,7 @@ export const auditTool = (spend: SpendInput): ToolAudit => {
       };
 
       candidates.push(
-        buildRecommendation(recommendation, currentMonthlyCost, [
+        buildRecommendation(recommendation, comparableCurrentMonthlyCost, [
           ...baseReasons,
           "Comparable capability with lower monthly cost.",
         ]),
@@ -268,7 +294,7 @@ export const auditTool = (spend: SpendInput): ToolAudit => {
         };
 
         candidates.push(
-          buildRecommendation(recommendation, currentMonthlyCost, [
+          buildRecommendation(recommendation, comparableCurrentMonthlyCost, [
             ...baseReasons,
             `Use ${option.name} pricing for eligible workloads.`,
           ]),
@@ -310,7 +336,7 @@ export const auditTool = (spend: SpendInput): ToolAudit => {
     toolName: tool.displayName,
     planId: currentPlan.id,
     planName: currentPlan.name,
-    monthlyCost: currentMonthlyCost,
+    monthlyCost: comparableCurrentMonthlyCost,
     currency: currentPricing.currency,
     type: "none",
   };
@@ -332,7 +358,7 @@ export const auditTool = (spend: SpendInput): ToolAudit => {
     pricingCountry: spend.country,
     currentPlanId: currentPlan.id,
     currentPlanName: currentPlan.name,
-    currentMonthlyCost,
+    currentMonthlyCost: comparableCurrentMonthlyCost,
     recommended: recommendation,
     savingsMonthly,
     savingsAnnual,
