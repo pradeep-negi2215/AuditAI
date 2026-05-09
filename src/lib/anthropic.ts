@@ -1,81 +1,46 @@
-export interface SummaryContext {
-  companyName?: string;
+import Anthropic from "@anthropic-ai/sdk";
+
+export type SummaryInput = {
   teamSize?: number;
   currency?: string;
   totalMonthlySavings: number;
   highlights: string[];
-}
-
-const buildFallbackSummary = (context: SummaryContext) => {
-  const currency = context.currency ?? "USD";
-  const savingsLine =
-    context.totalMonthlySavings > 0
-      ? `We found an estimated ${currency} ${context.totalMonthlySavings.toFixed(2)} in monthly savings.`
-      : "We did not find meaningful overspend at this time.";
-
-  const highlights =
-    context.highlights.length > 0
-      ? `Top opportunities: ${context.highlights.join(", ")}.`
-      : "No immediate plan changes were flagged.";
-
-  return `${savingsLine} ${highlights} Keep reviewing usage monthly as plans and pricing change.`;
 };
 
-const buildSummaryPrompt = (context: SummaryContext) => {
-  const company = context.companyName ? `Company: ${context.companyName}` : "Company: N/A";
-  const teamSize = context.teamSize ? `Team size: ${context.teamSize}` : "Team size: N/A";
-  const currency = context.currency ?? "USD";
-
-  return [
-    company,
-    teamSize,
-    `Estimated monthly savings: ${currency} ${context.totalMonthlySavings.toFixed(2)}`,
-    `Highlights: ${context.highlights.join(" | ") || "None"}`,
-  ].join("\n");
-};
-
-export const generateSummary = async (context: SummaryContext) => {
+export async function generateSummary(input: SummaryInput): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return buildFallbackSummary(context);
-  }
 
-  const model = process.env.ANTHROPIC_SUMMARY_MODEL ?? "claude-sonnet-4.6";
-  const prompt = buildSummaryPrompt(context);
+  // If API key is not set, return fallback immediately
+  if (!apiKey) {
+    return `Based on your current subscriptions, our audit identified potential savings of ${input.totalMonthlySavings} per month. Review the breakdown below for specific recommendations.`;
+  }
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 220,
-        temperature: 0.4,
-        system:
-          "Write a single 90-110 word paragraph summarizing the audit results. Use neutral tone. Avoid promises or guarantees. Use the provided numbers only.",
-        messages: [{ role: "user", content: prompt }],
-      }),
+    const client = new Anthropic({ apiKey });
+
+    const message = await client.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 200,
+      system:
+        "Write a single 90–110 word paragraph summarizing an AI spend audit. Neutral tone. Use only the numbers provided. No promises or guarantees.",
+      messages: [
+        {
+          role: "user",
+          content: JSON.stringify(input),
+        },
+      ],
     });
 
-    if (!response.ok) {
-      return buildFallbackSummary(context);
+    // Extract text from the response
+    const textContent = message.content.find((block) => block.type === "text");
+    if (textContent && textContent.type === "text") {
+      return textContent.text;
     }
 
-    const data = (await response.json()) as {
-      content?: Array<{ text?: string }>;
-    };
-
-    const text = data.content?.[0]?.text?.trim();
-    if (!text) {
-      return buildFallbackSummary(context);
-    }
-
-    return text;
+    // Fallback if no text content
+    return `Based on your current subscriptions, our audit identified potential savings of ${input.totalMonthlySavings} per month. Review the breakdown below for specific recommendations.`;
   } catch {
-    return buildFallbackSummary(context);
+    // On any error, return fallback string — never throw
+    return `Based on your current subscriptions, our audit identified potential savings of ${input.totalMonthlySavings} per month. Review the breakdown below for specific recommendations.`;
   }
-};
+}
