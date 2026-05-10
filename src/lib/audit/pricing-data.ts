@@ -79,14 +79,14 @@ export interface AuditReport {
   generatedAt: string;
 }
 
-export const countryOptions: { code: CountryCode; name: string }[] = [
-  { code: "US", name: "United States" },
-  { code: "IN", name: "India" },
-  { code: "GB", name: "United Kingdom" },
-  { code: "CA", name: "Canada" },
-  { code: "AU", name: "Australia" },
-  { code: "DE", name: "Germany" },
-  { code: "FR", name: "France" },
+export const countryOptions: { code: CountryCode; name: string; label: string; currency: string }[] = [
+  { code: "US", name: "United States", label: "United States", currency: "USD" },
+  { code: "IN", name: "India",         label: "India",         currency: "INR" },
+  { code: "GB", name: "United Kingdom",label: "United Kingdom",currency: "GBP" },
+  { code: "CA", name: "Canada",        label: "Canada",        currency: "CAD" },
+  { code: "AU", name: "Australia",     label: "Australia",     currency: "AUD" },
+  { code: "DE", name: "Germany",       label: "Germany",       currency: "EUR" },
+  { code: "FR", name: "France",        label: "France",        currency: "EUR" },
 ];
 
 export const countryCurrencies: Record<CountryCode, string> = {
@@ -143,7 +143,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: true,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "pro",
@@ -152,7 +152,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: false,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "pro-plus",
@@ -161,7 +161,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: false,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "ultra",
@@ -170,7 +170,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: false,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "teams",
@@ -204,7 +204,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: true,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "pro",
@@ -213,7 +213,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: false,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "pro-plus",
@@ -222,7 +222,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: false,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "business",
@@ -256,7 +256,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: true,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "pro",
@@ -265,7 +265,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: false,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "max-5x",
@@ -274,7 +274,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: false,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "max-20x",
@@ -283,7 +283,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: false,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "team-standard",
@@ -317,7 +317,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: true,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "plus",
@@ -326,7 +326,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: false,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "pro-100",
@@ -335,7 +335,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: false,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "pro-200",
@@ -344,7 +344,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: false,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "business",
@@ -437,7 +437,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: true,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "plus",
@@ -446,7 +446,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: false,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "pro",
@@ -455,7 +455,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: false,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "ultra",
@@ -464,7 +464,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: false,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
       ],
     },
@@ -480,7 +480,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: true,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "pro",
@@ -489,7 +489,7 @@ export const pricingData: PricingDatabase = {
           isFreeTier: false,
           planType: "subscription",
           minSeats: 1,
-          maxSeats: 1,
+          maxSeats: 999,
         },
         {
           id: "teams",
@@ -535,4 +535,31 @@ export function getDefaultPlanId(toolId: ToolId): PlanId {
   const tool = getToolById(toolId);
   const freePlan = tool.plans.find((p) => p.isFreeTier);
   return freePlan ? freePlan.id : tool.plans[0]!.id;
+}
+
+/**
+ * Returns all plans that are valid for the given seat count.
+ * A plan is valid when minSeats <= seats <= maxSeats.
+ */
+export function getEligiblePlans(toolId: ToolId, seats: number): Plan[] {
+  const tool = getToolById(toolId);
+  return tool.plans.filter(
+    (p) => p.minSeats <= seats && (p.maxSeats === 999999 || p.maxSeats >= seats),
+  );
+}
+
+/**
+ * Returns the cheapest eligible plan for the given seat count.
+ * Prefers non-free plans when there are paid options available.
+ */
+export function getCheapestEligiblePlanId(toolId: ToolId, seats: number): PlanId {
+  const eligible = getEligiblePlans(toolId, seats);
+  if (eligible.length === 0) {
+    return getDefaultPlanId(toolId);
+  }
+  // Sort by total cost ascending, pick lowest
+  const sorted = [...eligible].sort(
+    (a, b) => a.pricePerSeatMonthly * seats - b.pricePerSeatMonthly * seats,
+  );
+  return sorted[0]!.id;
 }

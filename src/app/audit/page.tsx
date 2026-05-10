@@ -10,6 +10,7 @@ import {
 import {
   formatCurrency,
   getDefaultPlanId,
+  getEligiblePlans,
   getToolById,
   pricingData,
 } from "@/lib/audit/pricing-data";
@@ -208,7 +209,23 @@ export default function AuditPage() {
 
   const handleToolChange = (id: string, toolId: ToolId) => {
     const planId = getDefaultPlanId(toolId);
-    handleEntryChange(id, { toolId, planId });
+    handleEntryChange(id, { toolId, planId, seats: 1 });
+  };
+
+  const handleSeatsChange = (id: string, newSeats: number) => {
+    const entry = entries.find((e) => e.id === id);
+    if (!entry) return;
+    const eligible = getEligiblePlans(entry.toolId, newSeats);
+    const stillValid = eligible.some((p) => p.id === entry.planId);
+    if (stillValid) {
+      handleEntryChange(id, { seats: newSeats });
+    } else {
+      // Auto-pick the cheapest eligible plan for the new seat count
+      const cheapest = eligible.sort(
+        (a, b) => a.pricePerSeatMonthly * newSeats - b.pricePerSeatMonthly * newSeats,
+      )[0];
+      handleEntryChange(id, { seats: newSeats, planId: cheapest?.id ?? entry.planId });
+    }
   };
 
   const handleAddTool = () => {
@@ -482,8 +499,12 @@ export default function AuditPage() {
                   <CardContent className="space-y-6">
                     {entries.map((entry, index) => {
                       const tool = pricingData.tools[entry.toolId];
-                      const plans = tool?.plans ?? [];
-                      const selectedPlan = plans.find((plan) => plan.id === entry.planId);
+                      const allPlans = tool?.plans ?? [];
+                      const eligiblePlans = getEligiblePlans(entry.toolId, entry.seats);
+                      const selectedPlan = allPlans.find((plan) => plan.id === entry.planId);
+                      const totalMonthly = selectedPlan
+                        ? selectedPlan.pricePerSeatMonthly * entry.seats
+                        : 0;
 
                       return (
                         <div key={entry.id} className="space-y-4 rounded-2xl border border-border/70 bg-muted/20 p-4 shadow-sm">
@@ -500,63 +521,50 @@ export default function AuditPage() {
                             )}
                           </div>
 
-                          <div className="grid gap-4 md:grid-cols-2">
-                            <div className="space-y-2">
-                              <Label>Tool</Label>
-                              <Select
-                                value={entry.toolId}
-                                onChange={(event) =>
-                                  handleToolChange(
-                                    entry.id,
-                                    event.target.value as ToolId,
-                                  )
-                                }
-                              >
-                                {Object.values(pricingData.tools).map((option) => (
-                                  <option key={option.id} value={option.id}>
-                                    {option.name}
-                                  </option>
-                                ))}
-                              </Select>
-                            </div>
-                            <div className="space-y-2">
-                              <Label>Plan</Label>
-                              <Select
-                                value={entry.planId}
-                                onChange={(event) =>
-                                  handleEntryChange(entry.id, {
-                                    planId: event.target.value,
-                                  })
-                                }
-                              >
-                                {plans.map((plan) => (
-                                  <option key={plan.id} value={plan.id}>
-                                    {plan.name}
-                                  </option>
-                                ))}
-                              </Select>
-                            </div>
+                          {/* Row 1: Tool selector */}
+                          <div className="space-y-2">
+                            <Label>Tool</Label>
+                            <Select
+                              value={entry.toolId}
+                              onChange={(event) =>
+                                handleToolChange(
+                                  entry.id,
+                                  event.target.value as ToolId,
+                                )
+                              }
+                            >
+                              {Object.values(pricingData.tools).map((option) => (
+                                <option key={option.id} value={option.id}>
+                                  {option.name}
+                                </option>
+                              ))}
+                            </Select>
                           </div>
 
+                          {/* Row 2: Seats + Team size + Billing */}
                           <div className="grid gap-4 md:grid-cols-3">
                             <div className="space-y-2">
-                              <Label>Seats</Label>
-                              <p className="text-xs text-muted-foreground -mt-1">(licences you're paying for)</p>
+                              <Label htmlFor={`seats-${entry.id}`}>Seats (licences)</Label>
+                              <p className="-mt-1 text-xs text-muted-foreground">
+                                How many people are paying for this tool
+                              </p>
                               <Input
+                                id={`seats-${entry.id}`}
                                 type="number"
                                 min={1}
                                 value={entry.seats}
                                 onChange={(event) =>
-                                  handleEntryChange(entry.id, {
-                                    seats: Number(event.target.value),
-                                  })
+                                  handleSeatsChange(entry.id, Math.max(1, Number(event.target.value)))
                                 }
                               />
                             </div>
                             <div className="space-y-2">
-                              <Label>Team size</Label>
-                              <p className="text-xs text-muted-foreground -mt-1">(total people on your team)</p>
+                              <Label htmlFor={`teamsize-${entry.id}`}>Total team size</Label>
+                              <p className="-mt-1 text-xs text-muted-foreground">
+                                All people on your team (including non-users)
+                              </p>
                               <Input
+                                id={`teamsize-${entry.id}`}
                                 type="number"
                                 min={1}
                                 value={entry.teamSize}
@@ -569,6 +577,7 @@ export default function AuditPage() {
                             </div>
                             <div className="space-y-2">
                               <Label>Billing cycle</Label>
+                              <p className="-mt-1 text-xs text-muted-foreground">&nbsp;</p>
                               <Select
                                 value={entry.billingCycle}
                                 onChange={(event) =>
@@ -586,21 +595,44 @@ export default function AuditPage() {
                             </div>
                           </div>
 
+                          {/* Row 3: Plan (filtered by seat count) */}
                           <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2">
-                              <Label>Monthly spend (optional)</Label>
-                              <Input
-                                type="number"
-                                min={0}
-                                step={0.01}
-                                value={entry.monthlySpend}
+                              <Label>Plan
+                                <span className="ml-2 text-[10px] font-normal uppercase tracking-wider text-emerald-600">
+                                  auto-filtered for {entry.seats} seat{entry.seats !== 1 ? "s" : ""}
+                                </span>
+                              </Label>
+                              <Select
+                                value={entry.planId}
                                 onChange={(event) =>
-                                  handleEntryChange(entry.id, {
-                                    monthlySpend: event.target.value,
-                                  })
+                                  handleEntryChange(entry.id, { planId: event.target.value })
                                 }
-                                placeholder="Leave blank to use plan pricing"
-                              />
+                              >
+                                {eligiblePlans.length > 0 ? (
+                                  eligiblePlans.map((plan) => {
+                                    const planTotal = plan.pricePerSeatMonthly * entry.seats;
+                                    const priceLabel =
+                                      plan.isFreeTier
+                                        ? "Free"
+                                        : `$${plan.pricePerSeatMonthly}/seat · $${planTotal.toFixed(0)}/mo total`;
+                                    return (
+                                      <option key={plan.id} value={plan.id}>
+                                        {plan.name} — {priceLabel}
+                                      </option>
+                                    );
+                                  })
+                                ) : (
+                                  <option value="" disabled>
+                                    No plans available for {entry.seats} seats
+                                  </option>
+                                )}
+                              </Select>
+                              {eligiblePlans.length === 0 && (
+                                <p className="text-xs text-destructive">
+                                  Reduce seat count or contact the vendor for enterprise pricing.
+                                </p>
+                              )}
                             </div>
                             <div className="space-y-2">
                               <Label>Use case</Label>
@@ -621,9 +653,44 @@ export default function AuditPage() {
                             </div>
                           </div>
 
+                          {/* Row 4: Optional spend override */}
+                          <div className="space-y-2">
+                            <Label>Actual monthly spend (optional override)</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              step={0.01}
+                              value={entry.monthlySpend}
+                              onChange={(event) =>
+                                handleEntryChange(entry.id, {
+                                  monthlySpend: event.target.value,
+                                })
+                              }
+                              placeholder={`Leave blank — we'll use $${totalMonthly.toFixed(2)}/mo from plan pricing`}
+                            />
+                          </div>
+
+                          {/* Cost summary banner */}
                           {selectedPlan && (
-                            <div className="rounded-xl bg-background/80 p-3 text-xs text-muted-foreground">
-                              Selected plan: {selectedPlan.name}
+                            <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-background/70 px-4 py-3">
+                              <div className="flex-1">
+                                <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                                  Current cost estimate
+                                </p>
+                                <p className="mt-0.5 text-base font-semibold">
+                                  {entry.monthlySpend
+                                    ? `$${Number(entry.monthlySpend).toFixed(2)}/mo (override)`
+                                    : selectedPlan.isFreeTier
+                                      ? "Free"
+                                      : `$${totalMonthly.toFixed(2)}/mo · $${(totalMonthly * 12).toFixed(0)}/yr`}
+                                </p>
+                              </div>
+                              <div className="text-right text-xs text-muted-foreground">
+                                <p>{selectedPlan.name}</p>
+                                {!selectedPlan.isFreeTier && (
+                                  <p>${selectedPlan.pricePerSeatMonthly}/seat</p>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
