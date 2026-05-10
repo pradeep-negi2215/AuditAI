@@ -541,6 +541,7 @@ export default function AuditPage() {
                           <div className="grid gap-4 md:grid-cols-3">
                             <div className="space-y-2">
                               <Label>Seats</Label>
+                              <p className="text-xs text-muted-foreground -mt-1">(licences you're paying for)</p>
                               <Input
                                 type="number"
                                 min={1}
@@ -554,6 +555,7 @@ export default function AuditPage() {
                             </div>
                             <div className="space-y-2">
                               <Label>Team size</Label>
+                              <p className="text-xs text-muted-foreground -mt-1">(total people on your team)</p>
                               <Input
                                 type="number"
                                 min={1}
@@ -561,7 +563,6 @@ export default function AuditPage() {
                                 onChange={(event) =>
                                   handleEntryChange(entry.id, {
                                     teamSize: Number(event.target.value),
-                                    seats: Number(event.target.value),
                                   })
                                 }
                               />
