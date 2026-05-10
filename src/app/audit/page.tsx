@@ -653,23 +653,6 @@ export default function AuditPage() {
                             </div>
                           </div>
 
-                          {/* Row 4: Optional spend override */}
-                          <div className="space-y-2">
-                            <Label>Actual monthly spend (optional override)</Label>
-                            <Input
-                              type="number"
-                              min={0}
-                              step={0.01}
-                              value={entry.monthlySpend}
-                              onChange={(event) =>
-                                handleEntryChange(entry.id, {
-                                  monthlySpend: event.target.value,
-                                })
-                              }
-                              placeholder={`Leave blank — we'll use $${totalMonthly.toFixed(2)}/mo from plan pricing`}
-                            />
-                          </div>
-
                           {/* Cost summary banner */}
                           {selectedPlan && (
                             <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-background/70 px-4 py-3">
@@ -678,11 +661,9 @@ export default function AuditPage() {
                                   Current cost estimate
                                 </p>
                                 <p className="mt-0.5 text-base font-semibold">
-                                  {entry.monthlySpend
-                                    ? `$${Number(entry.monthlySpend).toFixed(2)}/mo (override)`
-                                    : selectedPlan.isFreeTier
-                                      ? "Free"
-                                      : `$${totalMonthly.toFixed(2)}/mo · $${(totalMonthly * 12).toFixed(0)}/yr`}
+                                  {selectedPlan.isFreeTier
+                                    ? "Free"
+                                    : `$${totalMonthly.toFixed(2)}/mo · $${(totalMonthly * 12).toFixed(0)}/yr`}
                                 </p>
                               </div>
                               <div className="text-right text-xs text-muted-foreground">
