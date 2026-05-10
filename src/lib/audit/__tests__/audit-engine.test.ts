@@ -40,24 +40,12 @@ describe("runAudit", () => {
   });
 
   it("Test 2: Already optimal - no optimization available", () => {
-    const inputs: SpendInput[] = [
-      {
-        ...baseInput,
-        toolId: "claude",
-        currentPlanId: "max-5x",
-        seats: 1,
-        teamSize: 1,
-        useCase: "writing",
-        monthlySpend: 100, // On max plan
-      },
-    ];
-
     // Check what options exist for Claude max-5x
     // The engine should find alternatives like Claude Max-20x (more expensive)
     // or cheaper options like Claude Pro or free
     // So this ISN'T actually optimal - there's a free tier
     // Let's instead use a test where truly optimal (no free tier in alternatives)
-    
+
     // Better test: Use API tool where there's truly no cheaper option
     const apiInputs: SpendInput[] = [
       {

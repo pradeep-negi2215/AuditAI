@@ -3,6 +3,7 @@ import {
   type AuditResult,
   type SpendInput,
   type Plan,
+  type ToolId,
   countryCurrencies,
   getToolById,
   getPlanById,
@@ -22,8 +23,6 @@ function auditToolHelper(input: SpendInput): AuditResult {
   const tool = getToolById(input.toolId);
   const currentPlan = getPlanById(input.toolId, input.currentPlanId);
   const currency = countryCurrencies[input.country];
-  const reasons: string[] = [];
-  const flags: string[] = [];
 
   // Determine current spend - only calculate from plan if monthlySpend not explicitly provided
   let currentSpendMonthly = 0;
@@ -189,7 +188,7 @@ function auditToolHelper(input: SpendInput): AuditResult {
     if (altToolId === input.toolId) continue;
 
     try {
-      const altTool = getToolById(altToolId as any);
+      const altTool = getToolById(altToolId as ToolId);
 
       const altEligiblePlans = altTool.plans.filter(
         (p) =>
